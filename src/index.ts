@@ -87,12 +87,17 @@ import {
 
   async function getState(userId: string): Promise<ConversationState> {
     if (redis) {
-      const raw = await redis.get<string>(`${KEY_PREFIX}:state:${userId}`);
-      if (raw && typeof raw === "string") {
-        try {
-          return JSON.parse(raw) as ConversationState;
-        } catch {
-          return { type: "idle" };
+      const raw = await redis.get(`${KEY_PREFIX}:state:${userId}`);
+      if (raw != null) {
+        if (typeof raw === "string") {
+          try {
+            return JSON.parse(raw) as ConversationState;
+          } catch {
+            return { type: "idle" };
+          }
+        }
+        if (typeof raw === "object" && raw !== null && "type" in raw) {
+          return raw as ConversationState;
         }
       }
       return { type: "idle" };
@@ -108,13 +113,15 @@ import {
   }
   async function getTasks(userId: string): Promise<Task[]> {
     if (redis) {
-      const raw = await redis.get<string>(`${KEY_PREFIX}:tasks:${userId}`);
-      if (Array.isArray(raw)) return raw as Task[];
-      if (typeof raw === "string") {
-        try {
-          return JSON.parse(raw) as Task[];
-        } catch {
-          return [];
+      const raw = await redis.get(`${KEY_PREFIX}:tasks:${userId}`);
+      if (raw != null) {
+        if (Array.isArray(raw)) return raw as Task[];
+        if (typeof raw === "string") {
+          try {
+            return JSON.parse(raw) as Task[];
+          } catch {
+            return [];
+          }
         }
       }
       return [];
@@ -171,39 +178,9 @@ import {
     const userId = getUserId(event);
     const { replyToken } = event;
     const text = (event.message as TextMessage).text.trim();
-    const textNorm = text.toLowerCase().replace(/\s/g, ""); // 空白除去して比較
-
-    const sendReply = async (msg: string): Promise<void> => {
-      try {
-        await client.replyMessage({
-          replyToken,
-          messages: [{ type: "text", text: msg }],
-        });
-      } catch (err) {
-        console.error("replyMessage failed:", err instanceof Error ? err.message : err);
-        throw err;
-      }
-    };
-
-    // 「マイID」「userid」「user id」などで自分の LINE ユーザーIDを返す
-    const isMyIdCommand =
-      text === "マイID" ||
-      textNorm === "マイid" ||
-      textNorm === "userid" ||
-      textNorm === "myid";
-    if (isMyIdCommand) {
-      const msg = userId
-        ? `あなたのLINEユーザーID:\n${userId}`
-        : "userId を取得できませんでした。Bot と1:1のトークで「マイID」と送信してみてください。";
-      await sendReply(msg);
-      return undefined;
-    }
 
     if (!isAllowedUser(userId)) {
-      // 自分以外には一言返して、Bot が動いていることを分からせる
-      await sendReply(
-        "このBotは特定のユーザー専用です。あなたのIDを取得するには「マイID」と送ってください。"
-      );
+      // 自分以外には反応しない（返信なし）
       return undefined;
     }
 
