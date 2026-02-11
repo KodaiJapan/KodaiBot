@@ -6,24 +6,26 @@ import { middleware, messagingApi, } from "@line/bot-sdk";
 import express from "express";
 import { load } from "ts-dotenv";
 import { Redis } from "@upstash/redis";
-// 環境変数 (.env) を読み込み
-const env = load({
-    CHANNEL_ACCESS_TOKEN: String,
-    CHANNEL_SECRET: String,
-    PORT: Number,
-    ALLOWED_LINE_USER_ID: String,
-});
-const PORT = env.PORT || 3000;
-// タスク管理等に反応するユーザー（自分）の LINE ユーザーID。取得方法: Bot に「マイID」と送信すると返ってくる
-const ALLOWED_LINE_USER_ID = env.ALLOWED_LINE_USER_ID || "";
+const env = (() => {
+    try {
+        return load({}, ".env");
+    }
+    catch {
+        return process.env;
+    }
+})();
+const CHANNEL_ACCESS_TOKEN = env.CHANNEL_ACCESS_TOKEN ?? "";
+const CHANNEL_SECRET = env.CHANNEL_SECRET ?? "";
+const PORT = Number(env.PORT) || 3000;
+const ALLOWED_LINE_USER_ID = env.ALLOWED_LINE_USER_ID ?? "";
 // LINE Bot 用の設定（署名検証・APIクライアント）
 const config = {
-    channelAccessToken: env.CHANNEL_ACCESS_TOKEN || "",
-    channelSecret: env.CHANNEL_SECRET || "",
+    channelAccessToken: CHANNEL_ACCESS_TOKEN,
+    channelSecret: CHANNEL_SECRET,
 };
 const middlewareConfig = config;
 const client = new messagingApi.MessagingApiClient({
-    channelAccessToken: env.CHANNEL_ACCESS_TOKEN || "",
+    channelAccessToken: CHANNEL_ACCESS_TOKEN,
 });
 const app = express();
 const KEY_PREFIX = "kodaibot";
@@ -250,8 +252,11 @@ async (req, res) => {
         res.status(200).send("OK");
     }
 });
-// サーバー起動（Vercel では未使用、ローカル用）
-app.listen(PORT, () => {
-    console.log(`http://localhost:${PORT}/`);
-});
+// サーバー起動はローカルのみ（Vercel では export された app がハンドラとして使われる）
+if (process.env.VERCEL !== "1") {
+    app.listen(PORT, () => {
+        console.log(`http://localhost:${PORT}/`);
+    });
+}
+export default app;
 //# sourceMappingURL=index.js.map
