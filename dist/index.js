@@ -1,12 +1,17 @@
+/**
+ * LINE Bot (KodaiBot) エントリポイント
+ */
 import { middleware, messagingApi, } from "@line/bot-sdk";
 import express from "express";
 import { load } from "ts-dotenv";
+// 環境変数 (.env) を読み込み
 const env = load({
     CHANNEL_ACCESS_TOKEN: String,
     CHANNEL_SECRET: String,
     PORT: Number,
 });
 const PORT = env.PORT || 3000;
+// LINE Bot 用の設定（署名検証・APIクライアント）
 const config = {
     channelAccessToken: env.CHANNEL_ACCESS_TOKEN || "",
     channelSecret: env.CHANNEL_SECRET || "",
@@ -16,38 +21,36 @@ const client = new messagingApi.MessagingApiClient({
     channelAccessToken: env.CHANNEL_ACCESS_TOKEN || "",
 });
 const app = express();
+// ヘルスチェック用（Vercel や LINE Webhook 検証用）
 app.get("/", async (_, res) => {
     return res.status(200).send({
         message: "success",
     });
 });
+/**
+ * テキストメッセージイベントを処理し、ランダムな変換結果で返信する
+ */
 const textEventHandler = async (event) => {
+    // テキストメッセージ以外は無視
     if (event.type !== "message" || event.message.type !== "text") {
         return undefined;
     }
     const { replyToken } = event;
     const text = event.message.text;
-    const resText = (() => {
-        switch (Math.floor(Math.random() * 3)) {
-            case 0:
-                return text.split("").reverse().join("");
-            case 1:
-                return text.split("").join(" ");
-            default:
-                return text.split("").reverse().join(" ");
-        }
-    })();
-    console.log(resText);
+    console.log(text);
     const response = {
         type: "text",
-        text: resText,
+        text: text,
     };
+    // 変換したテキストで返信
     await client.replyMessage({
         replyToken: replyToken,
         messages: [response],
     });
 };
-app.post("/webhook", middleware(middlewareConfig), async (req, res) => {
+// LINE からの Webhook 受信エンドポイント（POST /webhook）
+app.post("/webhook", middleware(middlewareConfig), // 署名検証
+async (req, res) => {
     const events = req.body.events ?? [];
     let hasError = false;
     await Promise.all(events.map(async (event) => {
@@ -66,6 +69,7 @@ app.post("/webhook", middleware(middlewareConfig), async (req, res) => {
         res.status(200).send("OK");
     }
 });
+// サーバー起動（Vercel では未使用、ローカル用）
 app.listen(PORT, () => {
     console.log(`http://localhost:${PORT}/`);
 });
