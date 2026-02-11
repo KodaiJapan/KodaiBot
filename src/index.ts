@@ -25,6 +25,7 @@ import {
   });
 
   const PORT = env.PORT || 3000;
+  // タスク管理等に反応するユーザー（自分）の LINE ユーザーID。取得方法: Bot に「マイID」と送信すると返ってくる
   const ALLOWED_LINE_USER_ID = env.ALLOWED_LINE_USER_ID || "";
 
   // LINE Bot 用の設定（署名検証・APIクライアント）
@@ -159,13 +160,23 @@ import {
     }
 
     const userId = getUserId(event);
+    const { replyToken } = event;
+    const text = (event.message as TextMessage).text.trim();
+
+    // 「マイID」で自分の LINE ユーザーIDを確認できる（.env の ALLOWED_LINE_USER_ID にコピーして使う）
+    if (userId && (text === "マイID" || text.toLowerCase() === "userid")) {
+      await client.replyMessage({
+        replyToken,
+        messages: [{ type: "text", text: `あなたのLINEユーザーID:\n${userId}` }],
+      });
+      return undefined;
+    }
+
     if (!isAllowedUser(userId)) {
       // 自分以外には反応しない（返信なし）
       return undefined;
     }
 
-    const { replyToken } = event;
-    const text = (event.message as TextMessage).text.trim();
     const uid = userId as string;
     const state = await getState(uid);
     const tasks = await getTasks(uid);
