@@ -45,8 +45,8 @@ import {
 
   const app: Application = express();
 
-  // POST の JSON body を解析（LINE Webhook に必須。無いと req.body が undefined でクラッシュする）
-  app.use(express.json());
+  // ※ express.json() を /webhook より前に使うと、LINE の署名検証に必要な「生 body」が失われて検証失敗し、何も返らなくなる。
+  // LINE の middleware が body をパースするので、/webhook では追加の body パースは不要。
 
   // --- タスク管理用の型とストア（Redis またはインメモリ） ---
   type Task = { id: string; name: string; priority: number; deadline: string };
@@ -171,21 +171,39 @@ import {
     const userId = getUserId(event);
     const { replyToken } = event;
     const text = (event.message as TextMessage).text.trim();
+    const textNorm = text.toLowerCase().replace(/\s/g, ""); // 空白除去して比較
 
-    // 「マイID」または「userid」で自分の LINE ユーザーIDを返す（.env の ALLOWED_LINE_USER_ID にコピーして使う）
-    if (text === "マイID" || text.toLowerCase() === "userid") {
+    const sendReply = async (msg: string): Promise<void> => {
+      try {
+        await client.replyMessage({
+          replyToken,
+          messages: [{ type: "text", text: msg }],
+        });
+      } catch (err) {
+        console.error("replyMessage failed:", err instanceof Error ? err.message : err);
+        throw err;
+      }
+    };
+
+    // 「マイID」「userid」「user id」などで自分の LINE ユーザーIDを返す
+    const isMyIdCommand =
+      text === "マイID" ||
+      textNorm === "マイid" ||
+      textNorm === "userid" ||
+      textNorm === "myid";
+    if (isMyIdCommand) {
       const msg = userId
         ? `あなたのLINEユーザーID:\n${userId}`
         : "userId を取得できませんでした。Bot と1:1のトークで「マイID」と送信してみてください。";
-      await client.replyMessage({
-        replyToken,
-        messages: [{ type: "text", text: msg }],
-      });
+      await sendReply(msg);
       return undefined;
     }
 
     if (!isAllowedUser(userId)) {
-      // 自分以外には反応しない（返信なし）
+      // 自分以外には一言返して、Bot が動いていることを分からせる
+      await sendReply(
+        "このBotは特定のユーザー専用です。あなたのIDを取得するには「マイID」と送ってください。"
+      );
       return undefined;
     }
 

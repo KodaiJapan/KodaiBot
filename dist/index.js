@@ -30,8 +30,6 @@ const client = new messagingApi.MessagingApiClient({
     channelAccessToken: CHANNEL_ACCESS_TOKEN,
 });
 const app = express();
-// POST の JSON body を解析（LINE Webhook に必須。無いと req.body が undefined でクラッシュする）
-app.use(express.json());
 const KEY_PREFIX = "kodaibot";
 // Upstash 用 (UPSTASH_*) または Vercel KV 用 (KV_REST_API_*) のどちらかがあれば Redis を使用
 const redis = (() => {
@@ -141,19 +139,34 @@ const textEventHandler = async (event) => {
     const userId = getUserId(event);
     const { replyToken } = event;
     const text = event.message.text.trim();
-    // 「マイID」または「userid」で自分の LINE ユーザーIDを返す（.env の ALLOWED_LINE_USER_ID にコピーして使う）
-    if (text === "マイID" || text.toLowerCase() === "userid") {
+    const textNorm = text.toLowerCase().replace(/\s/g, ""); // 空白除去して比較
+    const sendReply = async (msg) => {
+        try {
+            await client.replyMessage({
+                replyToken,
+                messages: [{ type: "text", text: msg }],
+            });
+        }
+        catch (err) {
+            console.error("replyMessage failed:", err instanceof Error ? err.message : err);
+            throw err;
+        }
+    };
+    // 「マイID」「userid」「user id」などで自分の LINE ユーザーIDを返す
+    const isMyIdCommand = text === "マイID" ||
+        textNorm === "マイid" ||
+        textNorm === "userid" ||
+        textNorm === "myid";
+    if (isMyIdCommand) {
         const msg = userId
             ? `あなたのLINEユーザーID:\n${userId}`
             : "userId を取得できませんでした。Bot と1:1のトークで「マイID」と送信してみてください。";
-        await client.replyMessage({
-            replyToken,
-            messages: [{ type: "text", text: msg }],
-        });
+        await sendReply(msg);
         return undefined;
     }
     if (!isAllowedUser(userId)) {
-        // 自分以外には反応しない（返信なし）
+        // 自分以外には一言返して、Bot が動いていることを分からせる
+        await sendReply("このBotは特定のユーザー専用です。あなたのIDを取得するには「マイID」と送ってください。");
         return undefined;
     }
     const uid = userId;
