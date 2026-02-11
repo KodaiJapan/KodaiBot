@@ -158,6 +158,32 @@ import {
       .join("\n");
   }
 
+  /**
+   * 「X月X日」「X月X日X時」「X月X日X時X分」を解釈し、統一した文字列で返す。
+   * 解釈できない場合は null。
+   */
+  function parseDeadlineInput(input: string): string | null {
+    const trimmed = input.trim();
+    // X月X日 / X月X日X時 / X月X日X時X分（X は1〜2桁の数字）
+    const m = trimmed.match(
+      /^(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2})時)?(?:\s*(\d{1,2})分)?$/
+    );
+    if (!m) return null;
+    const month = parseInt(m[1]!, 10);
+    const day = parseInt(m[2]!, 10);
+    const hour = m[3] != null ? parseInt(m[3], 10) : null;
+    const minute = m[4] != null ? parseInt(m[4], 10) : null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    if (hour != null && (hour < 0 || hour > 23)) return null;
+    if (minute != null && (minute < 0 || minute > 59)) return null;
+    let result = `${month}月${day}日`;
+    if (hour != null) {
+      result += ` ${hour}時`;
+      if (minute != null) result += `${minute}分`;
+    }
+    return result;
+  }
+
   // ヘルスチェック用（Vercel や LINE Webhook 検証用）
   app.get("/", async (_: Request, res: Response): Promise<Response> => {
     return res.status(200).send({
@@ -195,6 +221,16 @@ import {
       });
     };
 
+    // フロー途中で止めるコマンド（タスク追加・タスク完了のどちらでも有効）
+    const isCancelCommand =
+      text === "キャンセル" || text === "やめる" || text === "中止" || text === "cancel";
+    if (isCancelCommand && state.type !== "idle") {
+      await setState(uid, { type: "idle" });
+      const flowName = state.type === "task_add" ? "タスク追加" : "タスク完了";
+      await reply(`${flowName}をキャンセルしました。`);
+      return undefined;
+    }
+
     // タスク追加フロー途中の応答
     if (state.type === "task_add") {
       if (state.step === "task_name") {
@@ -218,15 +254,22 @@ import {
           taskName: state.taskName ?? "未定",
           priority: p,
         });
-        await reply("いつまでに終わらせたい？");
+        await reply("いつまでに終わらせたい？（例: 12月25日 または 12月25日14時30分）");
         return undefined;
       }
       if (state.step === "deadline") {
+        const deadlineStr = parseDeadlineInput(text);
+        if (deadlineStr === null) {
+          await reply(
+            "日付がわかりません。例: 12月25日 または 12月25日14時30分 のように入力してください。"
+          );
+          return undefined;
+        }
         const task: Task = {
           id: `task-${Date.now()}`,
           name: state.taskName ?? "未定",
           priority: state.priority ?? 1,
-          deadline: text,
+          deadline: deadlineStr,
         };
         await addTask(uid, task);
         await setState(uid, { type: "idle" });
