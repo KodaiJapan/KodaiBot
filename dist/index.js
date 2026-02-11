@@ -130,12 +130,53 @@ function formatTaskList(tasks) {
         .map((t, i) => `${i + 1}. ${t.name}（優先${t.priority}・${t.deadline}まで）`)
         .join("\n");
 }
+/** JST で「今日」の 0:00 の Date を返す（UTC で保持） */
+function getJSTToday() {
+    const now = Date.now();
+    const jst = new Date(now + 9 * 60 * 60 * 1000);
+    const y = jst.getUTCFullYear();
+    const m = jst.getUTCMonth();
+    const d = jst.getUTCDate();
+    return new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+}
 /**
- * 「X月X日」「X月X日X時」「X月X日X時X分」を解釈し、統一した文字列で返す。
- * 解釈できない場合は null。
+ * 「今日」「明日」「明後日」「X日後」および「X月X日」形式を解釈し、統一した文字列で返す。
+ * 例: 明日 → 2月12日、3日後の18時30分 → 2月14日 18時30分
  */
 function parseDeadlineInput(input) {
     const trimmed = input.trim();
+    // 今日 / 明日 / 明後日 / X日後（任意で の?X時X分）
+    const relativeMatch = trimmed.match(/^(今日|明日|明後日|(\d+)日後)(?:の?(\d{1,2})時(?:(\d{1,2})分)?)?$/);
+    if (relativeMatch) {
+        let daysToAdd = 0;
+        if (relativeMatch[1] === "今日")
+            daysToAdd = 0;
+        else if (relativeMatch[1] === "明日")
+            daysToAdd = 1;
+        else if (relativeMatch[1] === "明後日")
+            daysToAdd = 2;
+        else if (relativeMatch[2] != null)
+            daysToAdd = parseInt(relativeMatch[2], 10);
+        else
+            return null;
+        const hour = relativeMatch[3] != null ? parseInt(relativeMatch[3], 10) : null;
+        const minute = relativeMatch[4] != null ? parseInt(relativeMatch[4], 10) : null;
+        if (hour != null && (hour < 0 || hour > 23))
+            return null;
+        if (minute != null && (minute < 0 || minute > 59))
+            return null;
+        const base = getJSTToday();
+        const target = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + daysToAdd, hour ?? 0, minute ?? 0, 0, 0));
+        const month = target.getUTCMonth() + 1;
+        const day = target.getUTCDate();
+        let result = `${month}月${day}日`;
+        if (hour != null) {
+            result += ` ${hour}時`;
+            if (minute != null)
+                result += `${minute}分`;
+        }
+        return result;
+    }
     // X月X日 / X月X日X時 / X月X日X時X分（X は1〜2桁の数字）
     const m = trimmed.match(/^(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2})時)?(?:\s*(\d{1,2})分)?$/);
     if (!m)
@@ -470,13 +511,13 @@ const textEventHandler = async (event) => {
                 taskName: state.taskName ?? "未定",
                 priority: p,
             });
-            await reply("いつまでに終わらせたい？（例: 12月25日 または 12月25日14時30分）");
+            await reply("いつまでに終わらせたい？（例: 明日 / 3日後 / 12月25日14時30分）");
             return undefined;
         }
         if (state.step === "deadline") {
             const deadlineStr = parseDeadlineInput(text);
             if (deadlineStr === null) {
-                await reply("日付がわかりません。例: 12月25日 または 12月25日14時30分 のように入力してください。");
+                await reply("日付がわかりません。例: 今日 / 明日 / 3日後の18時 / 12月25日 のように入力してください。");
                 return undefined;
             }
             const task = {
