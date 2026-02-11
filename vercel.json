@@ -1,16 +1,6 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "dist/index.js",
-        "use": "@vercel/node"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/.*",
-        "dest": "/dist/index.js",
-        "methods": ["GET", "POST"]
-      }
-    ]
-  }
+  "version": 2,
+  "builds": [{"src": "dist/index.js", "use": "@vercel/node"}],
+  "routes": [{"src": "/.*", "dest": "/dist/index.js", "methods": ["GET", "POST"]}],
+  "crons": [{"path": "/remind", "schedule": "*/10 * * * *"}]
+}
