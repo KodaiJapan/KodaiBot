@@ -48,9 +48,10 @@ const redis = (() => {
 })();
 const conversationState = new Map();
 const taskListByUser = new Map();
+// 1:1 は source.type === "user"。グループ/ルームは type が "group"/"room" だが message イベントでは userId が入る
 function getUserId(event) {
     const src = event.source;
-    return src?.type === "user" && src?.userId ? src.userId : null;
+    return src?.userId ?? null;
 }
 function isAllowedUser(userId) {
     return !!ALLOWED_LINE_USER_ID && userId === ALLOWED_LINE_USER_ID;
@@ -140,11 +141,14 @@ const textEventHandler = async (event) => {
     const userId = getUserId(event);
     const { replyToken } = event;
     const text = event.message.text.trim();
-    // 「マイID」で自分の LINE ユーザーIDを確認できる（.env の ALLOWED_LINE_USER_ID にコピーして使う）
-    if (userId && (text === "マイID" || text.toLowerCase() === "userid")) {
+    // 「マイID」または「userid」で自分の LINE ユーザーIDを返す（.env の ALLOWED_LINE_USER_ID にコピーして使う）
+    if (text === "マイID" || text.toLowerCase() === "userid") {
+        const msg = userId
+            ? `あなたのLINEユーザーID:\n${userId}`
+            : "userId を取得できませんでした。Bot と1:1のトークで「マイID」と送信してみてください。";
         await client.replyMessage({
             replyToken,
-            messages: [{ type: "text", text: `あなたのLINEユーザーID:\n${userId}` }],
+            messages: [{ type: "text", text: msg }],
         });
         return undefined;
     }

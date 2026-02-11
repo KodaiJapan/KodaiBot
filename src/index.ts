@@ -75,9 +75,10 @@ import {
   const conversationState = new Map<string, ConversationState>();
   const taskListByUser = new Map<string, Task[]>();
 
+  // 1:1 は source.type === "user"。グループ/ルームは type が "group"/"room" だが message イベントでは userId が入る
   function getUserId(event: WebhookEvent): string | null {
-    const src = event.source as { type?: string; userId?: string } | undefined;
-    return src?.type === "user" && src?.userId ? src.userId : null;
+    const src = event.source as { userId?: string } | undefined;
+    return src?.userId ?? null;
   }
 
   function isAllowedUser(userId: string | null): boolean {
@@ -171,11 +172,14 @@ import {
     const { replyToken } = event;
     const text = (event.message as TextMessage).text.trim();
 
-    // 「マイID」で自分の LINE ユーザーIDを確認できる（.env の ALLOWED_LINE_USER_ID にコピーして使う）
-    if (userId && (text === "マイID" || text.toLowerCase() === "userid")) {
+    // 「マイID」または「userid」で自分の LINE ユーザーIDを返す（.env の ALLOWED_LINE_USER_ID にコピーして使う）
+    if (text === "マイID" || text.toLowerCase() === "userid") {
+      const msg = userId
+        ? `あなたのLINEユーザーID:\n${userId}`
+        : "userId を取得できませんでした。Bot と1:1のトークで「マイID」と送信してみてください。";
       await client.replyMessage({
         replyToken,
-        messages: [{ type: "text", text: `あなたのLINEユーザーID:\n${userId}` }],
+        messages: [{ type: "text", text: msg }],
       });
       return undefined;
     }
