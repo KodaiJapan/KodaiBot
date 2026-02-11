@@ -417,6 +417,31 @@ import {
           break;
         }
       }
+
+      // 優先度1〜4共通: 期限の30分前にも通知
+      if (
+        remainingMinutes <= 30 &&
+        remainingMinutes > 30 - windowMinutes &&
+        !sent.has("30m")
+      ) {
+        try {
+          await client.pushMessage({
+            to: userId,
+            messages: [
+              {
+                type: "text",
+                text: `【リマインド】${task.name} は ${task.deadline} までです。（あと30分）`,
+              },
+            ],
+          });
+          await updateTask(userId, task.id, (t) => ({
+            ...t,
+            remindersSent: [...(t.remindersSent ?? []), "30m"],
+          }));
+        } catch (err) {
+          console.error("remind push failed:", err);
+        }
+      }
     }
     res.status(200).send("OK");
   });
