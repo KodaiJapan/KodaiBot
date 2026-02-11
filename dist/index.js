@@ -6,14 +6,16 @@ import { middleware, messagingApi, } from "@line/bot-sdk";
 import express from "express";
 import { load } from "ts-dotenv";
 import { Redis } from "@upstash/redis";
-const env = (() => {
-    try {
-        return load({}, ".env");
-    }
-    catch {
-        return process.env;
-    }
-})();
+const env = process.env.VERCEL === "1"
+    ? process.env
+    : (() => {
+        try {
+            return load({}, ".env");
+        }
+        catch {
+            return process.env;
+        }
+    })();
 const CHANNEL_ACCESS_TOKEN = env.CHANNEL_ACCESS_TOKEN ?? "";
 const CHANNEL_SECRET = env.CHANNEL_SECRET ?? "";
 const PORT = Number(env.PORT) || 3000;
@@ -28,6 +30,8 @@ const client = new messagingApi.MessagingApiClient({
     channelAccessToken: CHANNEL_ACCESS_TOKEN,
 });
 const app = express();
+// POST の JSON body を解析（LINE Webhook に必須。無いと req.body が undefined でクラッシュする）
+app.use(express.json());
 const KEY_PREFIX = "kodaibot";
 // Upstash 用 (UPSTASH_*) または Vercel KV 用 (KV_REST_API_*) のどちらかがあれば Redis を使用
 const redis = (() => {
@@ -234,7 +238,7 @@ const textEventHandler = async (event) => {
 // LINE からの Webhook 受信エンドポイント（POST /webhook）
 app.post("/webhook", middleware(middlewareConfig), // 署名検証
 async (req, res) => {
-    const events = req.body.events ?? [];
+    const events = (req.body && req.body.events) ?? [];
     let hasError = false;
     await Promise.all(events.map(async (event) => {
         try {
@@ -251,6 +255,11 @@ async (req, res) => {
     else {
         res.status(200).send("OK");
     }
+});
+// 未処理エラーでクラッシュしないように（Vercel 500 防止）
+app.use((err, _req, res, _next) => {
+    console.error(err);
+    res.status(500).send("Internal Server Error");
 });
 // サーバー起動はローカルのみ（Vercel では export された app がハンドラとして使われる）
 if (process.env.VERCEL !== "1") {

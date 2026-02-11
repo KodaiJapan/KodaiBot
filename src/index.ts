@@ -11,20 +11,23 @@ import {
     type MessageAPIResponseBase,
     messagingApi,
   } from "@line/bot-sdk";
-  import type { Application, Request, Response } from "express";
+  import type { Application, NextFunction, Request, Response } from "express";
   import express from "express";
   import { load } from "ts-dotenv";
   import { Redis } from "@upstash/redis";
 
-  // 環境変数（.env があればマージした結果、無ければ process.env。Vercel は process.env に注入される）
+  // 環境変数（Vercel では process.env のみ。ローカルでは .env を load）
   type EnvRecord = Record<string, string | undefined>;
-  const env: EnvRecord = (() => {
-    try {
-      return load({}, ".env") as EnvRecord;
-    } catch {
-      return process.env as EnvRecord;
-    }
-  })();
+  const env: EnvRecord =
+    process.env.VERCEL === "1"
+      ? (process.env as EnvRecord)
+      : (() => {
+          try {
+            return load({}, ".env") as EnvRecord;
+          } catch {
+            return process.env as EnvRecord;
+          }
+        })();
   const CHANNEL_ACCESS_TOKEN = env.CHANNEL_ACCESS_TOKEN ?? "";
   const CHANNEL_SECRET = env.CHANNEL_SECRET ?? "";
   const PORT = Number(env.PORT) || 3000;
@@ -41,6 +44,9 @@ import {
   });
 
   const app: Application = express();
+
+  // POST の JSON body を解析（LINE Webhook に必須。無いと req.body が undefined でクラッシュする）
+  app.use(express.json());
 
   // --- タスク管理用の型とストア（Redis またはインメモリ） ---
   type Task = { id: string; name: string; priority: number; deadline: string };
@@ -273,7 +279,7 @@ import {
     "/webhook",
     middleware(middlewareConfig), // 署名検証
     async (req: Request, res: Response): Promise<void> => {
-      const events: WebhookEvent[] = req.body.events ?? [];
+      const events: WebhookEvent[] = (req.body && req.body.events) ?? [];
       let hasError = false;
       await Promise.all(
         events.map(async (event: WebhookEvent) => {
@@ -292,6 +298,12 @@ import {
       }
     }
   );
+
+  // 未処理エラーでクラッシュしないように（Vercel 500 防止）
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    console.error(err);
+    res.status(500).send("Internal Server Error");
+  });
 
   // サーバー起動はローカルのみ（Vercel では export された app がハンドラとして使われる）
   if (process.env.VERCEL !== "1") {
