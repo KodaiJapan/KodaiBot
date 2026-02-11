@@ -17,6 +17,7 @@
   "description": "",
   "dependencies": {
     "@line/bot-sdk": "^10.6.0",
+    "@upstash/redis": "^1.36.2",
     "express": "^5.2.1"
   },
   "devDependencies": {
