@@ -30,3 +30,9 @@ package.json の "type": "module" により Node が ESM として扱う一方�
 
 
 npm run build でdistフォルダを吐き出してからデプロイする。
+
+webhook urlとvercel.jsonについて調べる。
+
+ここまでの行程は以下のurlで解決。
+https://zenn.dev/illionillion/articles/github-zenn-linkage-20240102
+
